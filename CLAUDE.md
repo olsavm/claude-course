@@ -18,7 +18,7 @@ npm run dev
 npm start
 ```
 
-No test runner or linter is configured yet.
+No test runner or linter is configured yet. Swagger UI is available at `http://localhost:3000/docs` when the server is running.
 
 ## Environment
 
@@ -33,11 +33,12 @@ The app follows a thin layered structure:
 - **`src/db/index.js`** — exports a single shared `pg.Pool`. Import this everywhere DB access is needed; never create a second pool.
 - **`src/db/migrations/`** — plain `.sql` files run in filename order by `src/db/migrate.js`. Add new migrations as `00N_description.sql`.
 
-Planned additions (see `CLAUDE.local.md` for full spec):
-- `src/routes/tasks.js` — Express router for all `/tasks` endpoints
-- `src/controllers/` — handler functions called by routes
-- `src/middleware/` — input validation and shared error helpers
-- `openapi.yaml` — required OpenAPI 3.x specification at the project root
+- **`src/routes/tasks.js`** — Express router for `/tasks/*`. Note: `/search` is registered before `/:id` to prevent Express treating the literal string "search" as a UUID param.
+- **`src/routes/stats.js`** — single `GET /stats` route.
+- **`src/controllers/tasks.js`** — all task handlers; status transitions use a `STATUS_TRANSITIONS` map (`todo→in_progress→done`).
+- **`src/controllers/stats.js`** — single aggregation query using `FILTER (WHERE ...)`.
+- **`src/middleware/validate.js`** — pure validation helpers (UUID regex, enum checks, date helpers); imported by controllers, not used as Express middleware.
+- **`openapi.yaml`** — OpenAPI 3.x spec at the project root; loaded at startup and served at `/docs` via `swagger-ui-express`.
 
 ## Database
 
