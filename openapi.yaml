@@ -1,0 +1,346 @@
+openapi: 3.0.3
+info:
+  title: Task Management API
+  description: Internal task management service for tracking work items.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Tasks
+  - name: Stats
+
+paths:
+  /tasks:
+    get:
+      summary: List tasks
+      description: Returns all tasks, optionally filtered by status and/or priority.
+      tags: [Tasks]
+      parameters:
+        - $ref: '#/components/parameters/StatusQuery'
+        - $ref: '#/components/parameters/PriorityQuery'
+      responses:
+        '200':
+          description: Array of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    post:
+      summary: Create a task
+      tags: [Tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+            example:
+              title: "Write unit tests"
+              description: "Cover all controller edge cases"
+              priority: "high"
+              due_date: "2026-06-01T00:00:00Z"
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /tasks/search:
+    get:
+      summary: Search tasks
+      description: Case-insensitive keyword search across title and description.
+      tags: [Tasks]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Search keyword
+          example: "bug fix"
+      responses:
+        '200':
+          description: Matching tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    get:
+      summary: Get a task
+      tags: [Tasks]
+      responses:
+        '200':
+          description: Task found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    put:
+      summary: Update a task
+      description: >
+        Updates title, description, priority, or due_date.
+        Status cannot be changed via this endpoint — use PATCH /tasks/{id}/status.
+      tags: [Tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+            example:
+              priority: "low"
+              due_date: null
+      responses:
+        '200':
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      summary: Delete a task
+      tags: [Tasks]
+      responses:
+        '204':
+          description: Task deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /tasks/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    patch:
+      summary: Advance task status
+      description: >
+        Moves the task forward one step in the workflow:
+        `todo → in_progress → done`. No skipping, no reversal.
+        No request body needed.
+      tags: [Tasks]
+      responses:
+        '200':
+          description: Task with updated status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /stats:
+    get:
+      summary: Dashboard statistics
+      description: Returns total task count, breakdown by status and priority, and overdue count.
+      tags: [Stats]
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+              example:
+                total: 12
+                by_status:
+                  todo: 4
+                  in_progress: 5
+                  done: 3
+                by_priority:
+                  low: 2
+                  medium: 7
+                  high: 3
+                overdue: 2
+
+components:
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Task UUID
+      example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+    StatusQuery:
+      name: status
+      in: query
+      schema:
+        $ref: '#/components/schemas/TaskStatus'
+      description: Filter by status
+
+    PriorityQuery:
+      name: priority
+      in: query
+      schema:
+        $ref: '#/components/schemas/TaskPriority'
+      description: Filter by priority
+
+  schemas:
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done]
+
+    TaskPriority:
+      type: string
+      enum: [low, medium, high]
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+          default: medium
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: Must be in the future.
+
+    TaskUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+
+    Stats:
+      type: object
+      properties:
+        total:
+          type: integer
+        by_status:
+          type: object
+          properties:
+            todo:        { type: integer }
+            in_progress: { type: integer }
+            done:        { type: integer }
+        by_priority:
+          type: object
+          properties:
+            low:    { type: integer }
+            medium: { type: integer }
+            high:   { type: integer }
+        overdue:
+          type: integer
+          description: Tasks past their due date that are not done.
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    ValidationErrors:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+
+  responses:
+    NotFound:
+      description: Task not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Task not found"
+
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/Error'
+              - $ref: '#/components/schemas/ValidationErrors'
+          example:
+            errors:
+              - "title must not exceed 200 characters"
+              - "due_date must be in the future"
